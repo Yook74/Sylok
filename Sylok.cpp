@@ -1,370 +1,456 @@
-/**
- * @brief An AI to play in the Battleships AI contest
- * @file Sylok.cpp
- * @author Stefan Brandle, Jonathan Geisler, Andrew Blomenberg
- * @date June 2016
- *
- * This Battleships AI channels the might of SYLOK THE DEFILED to crush it's opponents.
+/*
+   This program is designed to compete in the Taylor University Battelships AI contest
+   This started as a class project which was Co-authored by Stefan Brandle, Jonathan Geisler, Andrew Blomenberg and Daniel Thomas
+   Almost everything in here now has been written by Andrew Blomenberg
+   The most recent edit session started in June 2017
+
+   Sylok the Defiled is a reference to the game Destiny
  */
 
 #include <iostream>
-#include <cstdio>
-#include <vector>
 #include <cstdlib>
-#include <string>
 
 #include "conio.h"
 #include "Sylok.h"
-#include <stack>
 
 using namespace conio;
 using namespace std;
 
-/**
- * @brief Constructor that initializes any inter-round data structures.
- * @param boardSize Indication of the size of the board that is in use.
- *
- * The constructor runs when the AI is instantiated (the object gets created)
- * and is responsible for initializing everything that needs to be initialized
- * before any of the rounds happen. The constructor does not get called 
- * before rounds; newRound() gets called before every round.
- */
-Sylok::Sylok( int boardSize ) 
-	:PlayerV2(boardSize)
-{
-    // Could do any initialization of inter-round data structures here.
-
-	this->boardSize=boardSize;
-	roundCount=0;
-	shotResult=INVALID_SHOT;
-	firstHitLoc.resize(2);
-	prevShot.resize(2);
-	shootPairs.resize(2);
+/*
+  Simple inner class Coord. Coord stores a row,column pair
+  Also stores a priority for insertion into priority queues
+  */
+Coord::Coord(){
+	priority=0;
 }
 
-/**
- * @brief Destructor placeholder.
- * If your code does anything that requires cleanup when the object is
- * destroyed, do it here in the destructor.
+Coord::Coord(int row, int col)
+{
+	this->row=row;
+	this->col=col;
+	priority=0;
+}
+bool Coord::equals(const Coord that) const
+{
+	return (this->row==that.row) && (this->col == that.col);
+}
+/*
+   Overloads the == operator for Coord. FOR USE IN PQUEUE. 
+   Only compares the priority.
  */
-Sylok::~Sylok( ) {}
+bool Coord::operator == (const Coord that) const
+{
+	return (this->priority==that.priority);
+}
+/*
+   Overloads the < operator for Coord. FOR USE IN PQUEUE. 
+   Only compares the priority.
+   */
+bool Coord::operator< (const Coord that) const
+{
+	return this->priority<that.priority;
+}
+/*
+bool Coord::priorityLess(Coord first, Coord second)
+{
+	return first.priority<second.priority;
+}
+*/
+bool Coord::inBounds() const
+{
+	return row<10 && col<10 && row>=0 && col>=0;
+}
 
 /*
- * Private internal function that initializes a MAX_BOARD_SIZE 2D array of char to water.
+   This constructor must have a parameter for the size of the board. 
+   I have no idea what I would do if it was not 10 by 10 though.
+   The constuctor is just here to initialize variables.
+*/
+Sylok::Sylok( int boardSize ):PlayerV2(10)
+{
+	if(boardSize !=10)
+		throw "Sylok only works on boards of size 10";
+	
+	roundCount=0;
+}
+/*
+   Destructor
+   */
+Sylok::~Sylok(){}
+
+/*
+  Private internal function that initializes board to be a 10X10 array of water.
  */
 void Sylok::initializeBoard() {
-    for(int row=0; row<boardSize; row++) {
-	for(int col=0; col<boardSize; col++) {
-	    this->board[row][col] = WATER;
-	}	
+    for(int row=0; row<10; row++) {
+		for(int col=0; col<10; col++) {
+		    this->board[row][col] = WATER;
+		}	
     }
 }
 
 
-/**
- * @brief Specifies the AI's shot choice and returns the information to the caller.
- * @return Message The most important parts of the returned message are 
- * the row and column values. 
- *
- * See the Message class documentation for more information on the 
- * Message constructor.
- */
+/*
+   Returns Sylok's choice of shot in a Message
+   Terrible Spaghetti, forgive me
+*/
 Message Sylok::getMove() 
 {
-	int row=0;
-	int col=0;
-	vector<int> sub(2);
-	vector<vector<int> > stackRep;
-	int repIdx=0;
-
-
+	Coord finalShot; //where I will shoot
+	
+	//shotResult is updated in update()
 	switch(shotResult)
 	{
 		case HIT:
-			if (!hasHit)
-			{
-				firstHit=true;
-				firstHitLoc=prevShot;
-			}
-			else
-			{
-				firstHit=false;
-			}
-
-			hasHit=true;
-
-			if (firstHit)
-			{
-				int start=rand()%4;
-				vector<int> insert(2);
-				
-				for(int idx=0; idx<4; idx++)
-				{
-					switch (start)
-					{
-						case 0:
-							insert.at(0)=prevShot.at(0);
-							insert.at(1)=prevShot.at(1)+1;
-							break;
-						case 1:
-							insert.at(0)=prevShot.at(0)+1;
-							insert.at(1)=prevShot.at(1);
-							break;
-						case 2:
-							insert.at(0)=prevShot.at(0);
-							insert.at(1)=prevShot.at(1)-1;
-							break;
-						case 3:
-							insert.at(0)=prevShot.at(0)-1;
-							insert.at(1)=prevShot.at(1);
-							break;
-					}
-					hitPoss.push(insert);
-					
-					start++;
-					if(start>3)
-						start=0;
-				}
-			}
-			else
-			{
-				bool manCol=false;
-				bool manRow=false;
-				short direction=0;
-				
-				if (prevShot.at(0) != firstHitLoc.at(0))
-				{
-					manRow=true;
-					if (prevShot.at(0) < firstHitLoc.at(0))
-						direction=-1;
-					else
-						direction=1;
-				}
-				else
-				{
-					manCol=true;
-					if(prevShot.at(1) < firstHitLoc.at(1))
-						direction=-1;
-					else
-						direction=1;
-				}
-				vector<int> insert(2);
-				
-				insert.at(0)=firstHitLoc.at(0)+(!manRow);
-				insert.at(1)=firstHitLoc.at(1)+(!manCol);
-
-				hitPoss.push(insert);
-
-				insert.at(0)=firstHitLoc.at(1)-(!manCol);
-				insert.at(1)=firstHitLoc.at(1)-(!manRow);
-
-				hitPoss.push(insert);
-				
-				insert.at(0)=firstHitLoc.at(0)-(direction*manRow);
-				insert.at(1)=firstHitLoc.at(1)-(direction*manCol);
-				
-				hitPoss.push(insert);
-				
-				insert.at(0)=prevShot.at(0)+(direction*manRow);
-				insert.at(1)=prevShot.at(1)+(direction*manCol);
-
-				hitPoss.push(insert);
-
-
-			}
-			while(!hitPoss.empty())
-			{
-				sub=hitPoss.top();
-				hitPoss.pop();
-				
-				if(!(sub.at(0)>=boardSize or sub.at(1)>=boardSize or sub.at(0)<0 or sub.at(1)<0 ) && !(board[sub.at(0)][sub.at(1)] != WATER))
-				{
-					bool in=false;
-					for(unsigned int iter=0; iter<stackRep.size(); iter++)
-					{
-						in=stackRep.at(iter)==sub;
-						
-						if(in)
-							break;
-					}
-					if (!in)
-						stackRep.push_back(sub);
-				}
-
-			}
-
-			for(repIdx=stackRep.size()-1; repIdx>=0; repIdx--)
-			{
-				hitPoss.push(stackRep.at(repIdx));
-			}
-
-			//TODO make an intelligent response so this never happens
-			if(hitPoss.empty())
-			{
-				shotResult=INVALID_SHOT;
-				return getMove();
-			}
-
-			sub=hitPoss.top();
-			hitPoss.pop();
-			row=sub.at(0);
-			col=sub.at(1);
-
 			break;
 		case KILL:
-			hasHit=false;
-			firstHit=false;
+			hitPossIter("nearExistingShot");
+			break;
 		case MISS:
-			if (hasHit && !hitPoss.empty())
-			{
-				//TODO see above comment
-				if(hitPoss.empty())
-				{
-					shotResult=INVALID_SHOT;
-					return getMove();
-				}
-				sub=hitPoss.top();
-				hitPoss.pop();
-
-				row=sub.at(0);
-				col=sub.at(1);
-				break;
-			}
-
-			for(int r=0; r<boardSize; r++)
-			{
-				for (int c=0; c<boardSize; c++)
-				{
-					if(board[r][c]==HIT)
-					{
-						shotResult=HIT;
-						prevShot.at(0)=r;
-						prevShot.at(1)=c;
-						return getMove();
-					}
-				}
-			}
-
+			break;
 		case INVALID_SHOT:
-
-			int swi=0;
-			int rnd=0;
-			unsigned int index=0;
-			int r,c;
-
-			for(; swi<2; swi++)
-			{
-				index=0;
-				while(index<shootPairs.at(swi).size())
-				{
-					r=shootPairs.at(swi).at(index).at(0);
-					c=shootPairs.at(swi).at(index).at(1);
-
-					if(swi==0 && (board[r][c-1] != WATER || board[r][c+1] != WATER || board[r+1][c] != WATER || board[r-1][c] != WATER))
-					{
-							shootPairs.at(1).push_back(shootPairs.at(0).at(index));
-							shootPairs.at(0).erase(shootPairs.at(swi).begin()+index);
-					}
-					else if(board[r][c] != WATER)
-						shootPairs.at(swi).erase(shootPairs.at(swi).begin()+index);
-					else
-						index++;
-				}
-			}
-			
-			if (shootPairs.at(0).empty())
-				swi=1;
-			else
-				swi=0;
-
-			if (shootPairs.at(1).empty())
-			{
-				if(!hitPoss.empty())
-				{
-					sub=hitPoss.top();
-					row=sub.at(0);
-					col=sub.at(1);
-				}
-				else
-				{
-					row=0;
-					col=0;
-				}
-				
-			}
-			else
-			{
-				rnd=rand() % shootPairs.at(swi).size();
-				row=shootPairs.at(swi).at(rnd).at(0);
-				col=shootPairs.at(swi).at(rnd).at(1);
-				shootPairs.at(swi).erase(shootPairs.at(swi).begin()+rnd);
-			}
-
 			break;
 	}
-	prevShot.at(0)=row;
-	prevShot.at(1)=col;
-    Message result( SHOT, row, col, "Bang", None, 1 );
+	hitScan();
+	do {
+		finalShot=hitPoss.top();
+		hitPoss.pop();
+	}while (!(finalShot.inBounds() &&  board[finalShot.row][finalShot.col] == WATER));
+
+	prevShot=finalShot;
+    Message result( SHOT, finalShot.row, finalShot.col, "Bang", None, 1 );
     return result;
 }
+/*
+  Searches board for patterns of hits and calls appropriate helpers to enqueue high-probability points
+  */
+void Sylok::hitScan()
+{
+	
+	if( shotResult==MISS)
+		toPop--;
+	while(toPop>0)
+	{
+		hitPoss.pop();
+		toPop--;
+	}
 
-/**
- * @brief Tells the AI that a new round is beginning.
- * The AI show reinitialize any intra-round data structures.
+	for(int row=0; row<10; row++)
+	{
+		for(int col=0; col<10; col++)
+		{
+			if(board[row][col]==HIT)
+			{
+				Coord thisLoc(row,col);
+				Coord neighbor(row,col);
+				if(row>0 && board[row-1][col]==HIT)
+					neighbor.row--;
+				else if(col>0 && board[row][col-1]==HIT)
+					neighbor.col--;
+				else if(row<9 && board[row+1][col]==HIT)
+					neighbor.row++;
+				else if(col<9 && board[row][col+1]==HIT)
+					neighbor.col++;
+								
+				if(!neighbor.equals(thisLoc) && linearShip(thisLoc,neighbor))
+				{
+					stdSink(thisLoc, neighbor);
+					return;
+				}
+				//then it is either all alone or not on a linear ship
+
+				toPop=insertSurrounding(thisLoc);
+				
+			}
+		}
+	}
+}
+/*
+	returns true if the pair of coordinates given may be two hits on the same ship
+	also modifies the coordinates given to represent the known ends of the ship
+*/
+bool Sylok::linearShip(Coord& coord1, Coord& coord2)
+{
+	bool horizontal; //true if the ship is horizontal
+	horizontal=coord1.row==coord2.row;
+
+	if(horizontal)
+	{
+		while(coord1.col<9 && board[coord1.row][coord1.col+1] == HIT)
+			coord1.col++;
+		while(coord2.col>0 && board[coord2.row][coord2.col-1] == HIT)
+			coord2.col--;
+		return((coord1.col==9 || board[coord1.row][coord1.col+1] != MISS) && 
+		       (coord2.col==0 || board[coord2.row][coord2.col-1] != MISS));
+	}else{
+		while(coord1.row<9 && board[coord1.row+1][coord1.col] == HIT)
+			coord1.row++;
+		while(coord2.row>0 && board[coord2.row-1][coord2.col] == HIT)
+			coord2.row--;
+		return((coord1.row==9 || board[coord1.row+1][coord1.col] != MISS) && 
+		       (coord2.row==0 || board[coord2.row-1][coord2.col] != MISS));
+	}
+}
+/*
+   Returns a priority that represents the likelyhood that a Coord is over a ship
+   Uses the rand() function to give the Coordinates in hitPoss a random order
+ */
+int Sylok::hitPriority(string priorityType)
+{
+	int min, mod;
+	if(priorityType=="kill")
+	{
+		min=400;
+		mod=50;
+	}
+	else if(priorityType=="high")
+	{
+		min=300;
+		mod=50;
+	}
+	else if(priorityType=="standard")
+	{
+		min=150;
+		mod=100;
+	}
+	else if(priorityType=="low")
+	{
+		min=100;
+		mod=50;
+	}
+	else
+		throw new logic_error(priorityType+ " is not a valid priority");
+	return (rand()%mod)+min;
+}
+/*
+	Performs all the necessary checks before adding a point on hitPoss
+	Checks for inBounds, over water, and if it is already in hitPoss
+	returns true if the parameter is unique and valid
+ */
+bool Sylok::enqueuePoint(Coord insert)
+{
+	if(!insert.inBounds() || board[insert.row][insert.col]!=WATER)
+		return false;
+
+	bool duplicate=false;
+	stack<Coord> swap;
+	Coord top;
+	while(!hitPoss.empty())
+	{
+		top=hitPoss.top();
+		hitPoss.pop();
+		if (insert.equals(top))
+		{
+			duplicate=true;
+			if(top.priority<insert.priority)
+				top.priority=insert.priority;
+		}
+		swap.push(top);
+
+	}
+	while(!swap.empty())
+	{
+		hitPoss.push(swap.top());
+		swap.pop();
+	}
+	if(duplicate)
+		return false;
+	else
+		hitPoss.push(insert);
+
+	return true;
+
+}
+/*
+   Helper to getMove that looks at the four tiles that surround a given point and then
+   inserts them into hitPoss in a random order
+   Returns the number of Coords Enqueued;
+*/
+int Sylok::insertSurrounding(Coord firstHit)
+{
+	Coord  insert;
+	int enqueued=0;
+	
+	for(int neighbor=0; neighbor<4; neighbor++)
+	{
+		insert=firstHit;
+		switch (neighbor)
+		{
+			case 0:
+				insert.col++;
+				break;
+			case 1:
+				insert.row++;
+				break;
+			case 2:
+				insert.col--;
+				break;
+			case 3:
+				insert.row--;
+				break;
+		}
+		insert.priority=hitPriority("kill");
+		if(enqueuePoint(insert))
+			enqueued++;
+	}
+	return enqueued;
+}
+
+/*
+ Adds high-priority Coords onto hitPoss which are on either end of the line created by end1 and end2.
+ It assumes that both hits are on the same ship.
+ Returns false if it's assumption was wrong
+ */
+bool Sylok::stdSink(Coord end1, Coord end2)
+{
+	bool horizontal; //true if the ship is horizontal
+	bool enqueued=false; //true if a something was put on hitPoss
+
+	horizontal=end1.row==end2.row;
+
+	if(horizontal)
+	{
+		Coord right(end1.row, max(end2.col, end1.col)+1);
+		Coord  left(end1.row, min(end2.col, end1.col)-1);
+		right.priority=hitPriority("kill");
+		left. priority=hitPriority("kill");
+			
+		enqueued=enqueuePoint(right);
+		enqueued=enqueuePoint(left ) || enqueued;
+	}
+	else
+	{
+		Coord    top(max(end1.row, end2.row)+1, end1.col);
+		Coord bottom(min(end1.row, end2.row)-1, end1.col);
+		top.   priority=hitPriority("kill");
+		bottom.priority=hitPriority("kill");
+		
+		enqueued=enqueuePoint(top   );
+		enqueued=enqueuePoint(bottom) || enqueued;
+	}
+
+	return enqueued; 
+}
+/*
+   Similar to a forEach. 
+   Iterates through hitPoss and removes any coord for which the function parameter returns false.
+   The function parameter may also modify each coord.
+*/
+void Sylok::hitPossIter(string fName)
+{
+	vector<Coord> swap;
+	bool fResult=false;
+	Coord top;
+	while(!hitPoss.empty())
+	{
+		top= (Coord)hitPoss.top();
+		hitPoss.pop();
+
+		if(fName=="nearExistingShot")
+			fResult=nearExistingShot(top);
+		else if(fName=="duplicateCheck")
+			fResult=duplicateCheck(top);
+		else if(fName=="lowerPriority")
+			fResult=lowerPriority(top);
+		else
+			throw new logic_error( fName+" not recognized");
+
+		if(fResult)
+		{
+			swap.push_back(top);
+		}
+	}
+	while(!swap.empty())
+	{
+		hitPoss.push(swap.back());
+		swap.pop_back();
+	}
+}
+/*
+   One of the functions for hitPossIter
+   returns true as long as the Coord is in bounds.
+   Decreases the parameter's priority (150-100) if it is a regular shot near an existing shot
+ */
+bool Sylok::nearExistingShot(Coord& searchP) 
+{
+	if(!searchP.inBounds())
+		return false;
+
+	bool shotNearby=           searchP.col>0 && board[searchP.row][searchP.col-1] != WATER;
+	shotNearby= shotNearby || (searchP.col<9 && board[searchP.row][searchP.col+1] != WATER);
+	shotNearby= shotNearby || (searchP.row<9 && board[searchP.row+1][searchP.col] != WATER);
+	shotNearby= shotNearby || (searchP.row>0 && board[searchP.row-1][searchP.col] != WATER);
+
+	if (shotNearby)
+	{
+		searchP.priority=hitPriority("low");
+	}
+	return true;
+}
+/*
+  One of the functions for hitPossIter
+  Returns false if searchP is a duplicate
+*/
+bool Sylok::duplicateCheck(Coord searchP)
+{
+	vector<Coord> swap;
+
+	while(!hitPoss.empty())
+	{
+		if(searchP.equals(hitPoss.top()))
+			return false;
+		swap.push_back(hitPoss.top());
+		hitPoss.pop();
+	}
+	while(!swap.empty())
+	{
+		hitPoss.push(swap.back());
+		swap.pop_back();
+	}
+	return true;
+}
+/*
+ Changes any coordinate with a priority above 399 to a low priority location
+ Always returns true
+*/ 
+bool Sylok::lowerPriority(Coord& searchP)
+{
+	if(searchP.priority>399)
+		searchP.priority=hitPriority("low");
+	return true;
+}
+
+/*
+   Runs when a new game of battleship begins.
+   Calls InitalizeBoard, Adds ship names to the list, and 
+   sets up data structures for shooting and placing ships.
  */
 void Sylok::newRound() {
    this->initializeBoard();
    this->roundCount++;
-   
+
+   //Better than Ship 1-Ship 10
+   //shipNames is a stack
+   shipNames.push("Foxtrot");
+   shipNames.push("Echo");
+   shipNames.push("Delta");
+   shipNames.push("Charlie");
+   shipNames.push("Bravo");
+   shipNames.push("Alpha");
+
+
    //for placeOutside
-   for(int stk=0; stk<3; stk++)
-   {
-	 while(true)
-	 {
-	    if (startStacks.at(stk).empty())
-		  break;
-	    startStacks.at(stk).pop();
-	 }
-   }
+   usedStarts.clear();
+   
+   //effectively empties startCoords
+   startCoords.resize(0);
+   startCoords.resize(3);
 
-   //add the corners to the three stacks in a random order
-   int select = rand() % 4;
-   vector<int> pair(2);
-   for(int count=0; count<4; count++)
-   {
-	 switch(select)
-	 {
-	    case 0:
-		  pair.at(0)=0;
-		  pair.at(1)=0;
-		  break;
-	    case 1:
-		  pair.at(0)=0;
-		  pair.at(1)=9;
-		  break;
-	    case 2:
-		  pair.at(0)=9;
-		  pair.at(1)=0;
-		  break;
-	    case 3:
-		  pair.at(0)=9;
-		  pair.at(1)=9;
-		  break;
-	 }
-	 
-	 if (select==3)
-	    select=0;
-	 else
-	    select++;
-
-	 startStacks.at(0).push(pair);
-	 startStacks.at(1).push(pair);
-	 startStacks.at(2).push(pair);
-   }
-
+   fillStartCoords();
+   
    //for shooting 
-   this->hasHit=false;
-   this->firstHit=false;
+   this->shotResult=INVALID_SHOT;
+   this->toPop=0;
    
    while(true)
    {
@@ -372,97 +458,251 @@ void Sylok::newRound() {
 	   break;
 	 hitPoss.pop();
    }
+   generateShootCoords();
+}
+/*
+   Helper for newRound that fills hitPoss with a set of coordinates that form an inescapable pattern.
+   Each Coordinate inserted initially has a priority between 150 and 250. 
+   */
+void Sylok::generateShootCoords()
+{
+	int colStart=2; //Starting Column. Could be 0,1,or 2, but past me made it 2
+   Coord toPush;
+   int priority;
+
+   while(!hitPoss.empty())
+	   hitPoss.pop();
    
-   int colStart=2;
-   int swi=0;
-   
-   shootPairs.at(0).resize(0);
-   shootPairs.at(1).resize(0);
-   
-   for (int row=0; row<boardSize; row++)
+   for (int row=0; row<10; row++)
    {
-	 for(int col=colStart; col<boardSize;col+=3)
+	 for(int col=colStart; col<10;col+=3)
 	 {
-	    if(swi==1)
-			swi=0;
-		
-	    if(row==9 or row==0 or col==0 or col==9)
-			swi=1;
-		
-		pair.at(0)=row;
-		pair.at(1)=col;
-		shootPairs.at(swi).push_back(pair);
+		priority=hitPriority("standard");
+		toPush.row=row;
+		toPush.col=col;
+		toPush.priority=priority;
+		hitPoss.push(toPush);
 	}
 	colStart--;
 	if (colStart==-1)
 		colStart=2;
    }
 }
+/*
+   Helper for placeOutside called in newRound
+   Adds the four corners and two other points to each PQ in startCoords
+   Each ship will be placed unless two can share a side
+   */
+void Sylok::fillStartCoords()
+{
+	enqueueCoord(0,0,10+rand()%5);
+	enqueueCoord(0,9,10+rand()%5);
+	enqueueCoord(9,0,10+rand()%5);
+	enqueueCoord(9,9,10+rand()%5);
+	enqueueCoord(2,2,1);
+	enqueueCoord(7,7,1);
+	
+}
+/*
+   Helper for fillStartCoords
+   */
+void Sylok::enqueueCoord(int row, int col, int priority)
+{
+   
+   Coord toPush(row, col);
+   toPush.priority=priority;
+   for(int stackIdx=0; stackIdx<3; stackIdx++)
+   {
+	   startCoords.at(stackIdx).push(toPush);
+   }
+}
 
-/**
- * @brief Gets the AI's ship placement choice. This is then returned to the caller.
- * @param length The length of the ship to be placed.
- * @return Message The most important parts of the returned message are 
- * the direction, row, and column values. 
- *
- * The parameters returned via the message are:
- * 1. the operation: must be PLACE_SHIP 
- * 2. ship top row value
- * 3. ship top col value
- * 4. a string for the ship name
- * 5. direction Horizontal/Vertical (see defines.h)
- * 6. ship length (should match the length passed to placeShip)
+/*
+   PlaceShip decides where to put a ship of given length.
+   It calls different placing functions based on which one works well. 
+   Currently, it only calls placeOutside because that is the only function I have working
+
+   The parameters returned via the message are:
+   1. the operation: must be PLACE_SHIP 
+   2. ship top row value
+   3. ship top col value
+   4. a string for the ship name
+   5. direction Horizontal/Vertical (see defines.h)
+   6. ship length (should match the length passed to placeShip)
  */
 
 Message Sylok::placeShip(int length) {
     return placeOutside(length);
 }
 Message Sylok::placeOutside(int length) {
-   char shipName[10];
-   int outRow=0;
-   int outCol=0;
-   Direction outDir=Horizontal;
 
-   // Create ship names each time called: Ship0, Ship1, Ship2, ...
-   snprintf(shipName, sizeof shipName, "Ship%d", numShipsPlaced);
+   Message outMsg(PLACE_SHIP);
 
    //Check the stacks for invalid cooridnates
-   stack< vector<int> > tempStack;
-   bool goodPair;
+   removeInvalidCoords();
+   
+   //place a ship clockwise
+   Coord tempPair=startCoords.at(length-3).top();
+   startCoords.at(length-3).pop();
+
+   usedStarts.push_back(tempPair); 
+   outMsg=placeClockwise(tempPair.row,tempPair.col,length); //modifies tempPair as well
+
+   if(length==3 && tempPair.priority<20) 
+    //check the priority because the highest priority do not have space behind them
+   {
+	   // a length 3 ship can (and should) share a side with either a 3 or a 4 ship
+	   tempPair.priority=20;
+	   startCoords.at(0).push(tempPair);
+	   startCoords.at(1).push(tempPair);
+   }
+   if(length==4 && tempPair.priority<20)
+   {
+	   // a length 4 ship can (and should) share a side with a 3 ship
+	   tempPair.priority=20;
+	   startCoords.at(0).push(tempPair);
+   }
+   return outMsg;
+
+}
+/*
+   Helper for PlaceOutside that removes any Coords that have been used already from the StartCoords
+   */
+void Sylok::removeInvalidCoords()
+{
+   stack<Coord> tempStack;
+   bool goodCoord;
 
    for(int stk=0; stk<3; stk++)
    {
-	 while(!(startStacks.at(stk).empty() or usedStarts.empty()))
+	 while(!startCoords.at(stk).empty())
 	 {
-	    goodPair=true;
+	    goodCoord=true;
 	    
-	    for(unsigned int idx=0; idx<usedStarts.size(); idx++)
-	    {
-		  if (startStacks.at(stk).top()==usedStarts.at(idx))
-			goodPair=false;
-	    }
+		if(!usedStarts.empty())
+		{
+			// bad Coord if it has already been used
+			for(unsigned int idx=0; idx<usedStarts.size(); idx++)
+			{
+				if (usedStarts.at(idx)== startCoords.at(stk).top())
+				{
+					goodCoord=false;
+				}
+			}
+		}
+		if(!(startCoords.at(stk).top().inBounds()))
+			goodCoord=false;
+
+	    if(goodCoord)
+		  tempStack.push(startCoords.at(stk).top());
 	    
-	    if(goodPair)
-	    {
-		  tempStack.push(startStacks.at(stk).top());
-		  startStacks.at(stk).pop();
-	    }
+	    startCoords.at(stk).pop();
+	    
 	 }
+	 //put the good coordinates back into the stack
 	 while(!tempStack.empty())
 	 {
-	    startStacks.at(stk).push(tempStack.top());
+	    startCoords.at(stk).push(tempStack.top());
 	    tempStack.pop();
 	 }
    }
 
+}
+/*
+   This function takes a row, column, and length and returns a message that makes a legal move
+   it also MODIFIES ROW AND COLUMN to be off the end of the ship that was placed
+   */
+Message Sylok::placeClockwise(int& row, int& col, int length)
+{
+   vector< vector<string> > dirGrids(3);
 
-   Message response(PLACE_SHIP, outRow, outCol,shipName,outDir,length);
+
+   dirGrids.at(0).resize(10);
+   dirGrids.at(1).resize(10);
+   dirGrids.at(2).resize(10);
+
+   dirGrids.at(0).at(0)="rrrrrrrrdd";
+   dirGrids.at(0).at(1)="rrrrrrrddd";
+   dirGrids.at(0).at(2)="urrrrrdddd";
+   dirGrids.at(0).at(3)="uurrrddddd";
+   dirGrids.at(0).at(4)="uuurrddddd";
+   dirGrids.at(0).at(5)="uuuuullddd";
+   dirGrids.at(0).at(6)="uuuuullldd";
+   dirGrids.at(0).at(7)="uuuullllld";
+   dirGrids.at(0).at(8)="uuulllllll";
+   dirGrids.at(0).at(9)="uullllllll";
+   
+   dirGrids.at(1).at(0)="rrrrrrrddd";
+   dirGrids.at(1).at(1)="rrrrrrdddd";
+   dirGrids.at(1).at(2)="rrrrrddddd";
+   dirGrids.at(1).at(3)="urrrdddddd";
+   dirGrids.at(1).at(4)="uurrdddddd";
+   dirGrids.at(1).at(5)="uuuuullddd";
+   dirGrids.at(1).at(6)="uuuuuullld";
+   dirGrids.at(1).at(7)="uuuuulllll";
+   dirGrids.at(1).at(8)="uuuullllll";
+   dirGrids.at(1).at(9)="uuulllllll";
+   
+   dirGrids.at(2).at(0)="rrrrrrdddd";
+   dirGrids.at(2).at(1)="rrrrrrdddd";
+   dirGrids.at(2).at(2)="rrrrrddddd";
+   dirGrids.at(2).at(3)="rrrrrddddd";
+   dirGrids.at(2).at(4)="uurrrddddd";
+   dirGrids.at(2).at(5)="uuuuullldd";
+   dirGrids.at(2).at(6)="uuuuulllll";
+   dirGrids.at(2).at(7)="uuuuulllll";
+   dirGrids.at(2).at(8)="uuuullllll";
+   dirGrids.at(2).at(9)="uuuullllll";
+
+   /*
+   dirGrid[0]={'r','r','r','r','r','r','r','r','r','d'};
+   dirGrid[1]={'u','r','r','r','r','r','r','r','d','d'};
+   dirGrid[2]={'u','u','r','r','r','r','r','d','d','d'};
+   dirGrid[3]={'u','u','u','r','r','r','d','d','d','d'};
+   dirGrid[4]={'u','u','u','u','r','d','d','d','d','d'};
+   dirGrid[5]={'u','u','u','u','u','l','d','d','d','d'};
+   dirGrid[6]={'u','u','u','u','l','l','l','d','d','d'};
+   dirGrid[7]={'u','u','u','l','l','l','l','l','d','d'};
+   dirGrid[8]={'u','u','l','l','l','l','l','l','l','d'};
+   dirGrid[9]={'u','l','l','l','l','l','l','l','l','l'};
+   
+    */
+   Direction msgDir=Horizontal;
+   int msgRow=row;
+   int msgCol=col;
+
+   char dir= dirGrids.at(length-3).at(row)[col];
+
+   switch(dir)
+   {
+	 case'l':
+	    msgDir=Horizontal;
+	    msgCol-=(length-1);
+	    col-=(length+1);
+	    break;
+	 case'r':
+	    msgDir=Horizontal;
+	    col+=length+1;
+	    break;
+	 case 'u':
+	    msgDir=Vertical;
+	    row-=length+1;
+	    msgRow-=(length-1);
+	    break;
+	 case 'd':
+	    msgDir=Vertical;
+	    row+=(length+1);
+	    break;
+   }
+
+   Message response(PLACE_SHIP,msgRow, msgCol,shipNames.top(),msgDir,length);
+   shipNames.pop();
+
    return response;
 }
-//Message Sylok::p
-/**
- * @brief Updates the AI with the results of its shots and where the opponent is shooting.
- * @param msg Message specifying what happened + row/col as appropriate.
+/*
+   Gets information from the game as a message.
+   This function will eventually be a way to gather data for the learning algorithms
  */
 void Sylok::update(Message msg) {
     switch(msg.getMessageType()) {
@@ -479,10 +719,7 @@ void Sylok::update(Message msg) {
 	case TIE:
 	    break;
 	case OPPONENT_SHOT:
-	    // TODO: get rid of the cout, but replace in your AI with code that does something
-	    // useful with the information about where the opponent is shooting.
-	    //cout << gotoRowCol(20, 30) << "DumbPl: opponent shot at "<< msg.getRow() << ", " << msg.getCol() << flush;
 	    break;
     }
 }
-// Tritonal is pretty okay
+
