@@ -1,7 +1,7 @@
 /**
  * @brief An AI to play in the Battleships AI contest
  * @file Sylok.cpp
- * @author Stefan Brandle, Jonathan Geisler, Andrew Blomenberg, Daniel Thomas
+ * @author Stefan Brandle, Jonathan Geisler, Andrew Blomenberg
  * @date June 2016
  *
  * This Battleships AI channels the might of SYLOK THE DEFILED to crush it's opponents.
