@@ -44,5 +44,9 @@ Evergreen has two primary interfaces: a buffer interface and a prefs interface.
 | The prefs interface will use a UI theme which is popular in other Android configuration menus | low| not started | 1 | 
 | The prefs interface will be as simple as possible while still presenting the required information | med | not started | 1 | 
 
+## Scenarios
+**Jeff:** Jeff has gotten tired of typing "JeffGrunganhatestheveryideaofcheesecake@cheesecakehaters.org" into every email field, so he uses Evergreen to pin his email address. Now whenever he is prompted to enter his email address, he can quickly access it from any screen and paste it in.
+**Betty:** Jeff has just sent betty his contact information over text. Betty wants to create a new contact for Jeff on her phone, so she copies "Jeff", "Grungan", "JeffGrunganhatestheveryideaofcheesecake@cheesecakehaters.org", and "Chief of Cheesecake Disliking" seperately while she is in her texting app. She then switches to her contacts app and uses Evergreen to paste in each of Jeff's different contact fields without having to switch between apps.
+**Mark** Mark downloads Evergreen because he is bored. He looks at the icon, the name, and the two interfaces and starts composing poetry because that is the only way he can adequately describe the simplicity and intuitive nature of the interfaces, the synergy of the name and icon, and the amazingly fast and responsive features.
 
 
